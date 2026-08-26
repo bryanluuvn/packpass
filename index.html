@@ -131,6 +131,9 @@
   .star-btn.on{color:var(--gold);}
   .carry-btn{cursor:pointer;flex:0 0 auto;padding:5px;margin:-5px;color:var(--text-dim);display:flex;}
   .carry-btn.on{color:var(--teal);}
+  .note-btn{cursor:pointer;flex:0 0 auto;padding:5px;margin:-5px;color:var(--text-dim);display:flex;}
+  .note-btn.on{color:var(--text);}
+  .item-note-preview{font-size:11px;color:var(--text-dim);margin-top:2px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
   .item-del{color:var(--text-dim);cursor:pointer;padding:6px;margin:-6px;flex:0 0 auto;display:flex;opacity:0.6;}
   .item-del:hover{opacity:1;color:var(--red);}
 
@@ -259,6 +262,7 @@ const ICONS = {
   carry:`<path d="M7.5 8V6.5a4.5 4.5 0 019 0V8"/><rect x="4" y="8" width="16" height="12.5" rx="2.5"/><path d="M9 12.3v1.8M15 12.3v1.8"/>`,
   sync:`<path d="M4 12a8 8 0 0113.66-5.66"/><path d="M20 12a8 8 0 01-13.66 5.66"/><path d="M17.3 2.5v4.2h-4.2"/><path d="M6.7 21.5v-4.2h4.2"/>`,
   user:`<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"/>`,
+  note:`<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h6M9 16h6"/>`,
 };
 function icon(name, size, filled){
   size = size || 18;
@@ -299,7 +303,7 @@ const PRESETS = {
   ],
 };
 function buildPackingFromPreset(key){
-  return (PRESETS[key]||[]).map(([category,text,flagged])=>({id:cid(), category, text, packed:false, flagged:!!flagged, carry:false}));
+  return (PRESETS[key]||[]).map(([category,text,flagged])=>({id:cid(), category, text, packed:false, flagged:!!flagged, carry:false, note:''}));
 }
 
 const CATEGORY_ICON_CHOICES = ['clothes','toiletries','electronics','docs','health','other','search'];
@@ -315,7 +319,7 @@ function seedCategories(){
   ];
 }
 function seedPacking(){
-  const mk=(category,text,flagged,carry)=>({id:cid(),category,text,packed:false,flagged:!!flagged,carry:!!carry});
+  const mk=(category,text,flagged,carry)=>({id:cid(),category,text,packed:false,flagged:!!flagged,carry:!!carry,note:''});
   return [
     mk('clothes','Quần áo đủ số ngày',false,false),
     mk('toiletries','Bàn chải, kem đánh răng',false,false),
@@ -338,10 +342,11 @@ function seedFixedItems(){
 }
 function newTrip(name, packingItems){
   return {
-    id:cid(), name: name || 'Chuyến đi mới', activeTab:'packing', currentStopIndex:0,
+    id:cid(), name: name || 'Chuyến đi mới', activeTab:'packing',
     packing: packingItems || seedPacking(),
     carryChecked: {},
-    stops:[ { id:cid(), name:'Chặng 1', nights:1, fixedItems:seedFixedItems(), itemChecked:{} } ]
+    itemChecked: {},
+    fixedItems: seedFixedItems()
   };
 }
 function defaultState(){
@@ -365,7 +370,19 @@ async function loadState(){
     if(!state.categories) state.categories = seedCategories();
     state.trips.forEach(t=>{
       if(!t.carryChecked) t.carryChecked = {};
-      t.packing.forEach(i=>{ if(i.carry===undefined) i.carry=false; });
+      t.packing.forEach(i=>{ if(i.carry===undefined) i.carry=false; if(i.note===undefined) i.note=''; });
+      // Migrate old per-stop shape (from before "chặng" was removed) to a single flat checklist
+      if(!t.itemChecked || !t.fixedItems){
+        if(t.stops && t.stops.length){
+          t.itemChecked = t.stops[0].itemChecked || {};
+          t.fixedItems = t.stops[0].fixedItems || seedFixedItems();
+        }else{
+          t.itemChecked = t.itemChecked || {};
+          t.fixedItems = t.fixedItems || seedFixedItems();
+        }
+        delete t.stops;
+        delete t.currentStopIndex;
+      }
     });
   }catch(e){ state = defaultState(); }
 
@@ -381,8 +398,9 @@ async function loadState(){
 
   if(state.activeUserId){
     // fire both requests in parallel instead of waiting on one then the other
-    await Promise.allSettled([ loadUsers(), loadTripsForActiveUser(false) ]);
-    if(state.activeUserId && !state.users.find(u=>u.id===state.activeUserId)){
+    const [usersResult] = await Promise.allSettled([ loadUsers(), loadTripsForActiveUser(false) ]);
+    const usersConfirmed = usersResult.status === 'fulfilled' && usersResult.value === true;
+    if(usersConfirmed && state.activeUserId && !state.users.find(u=>u.id===state.activeUserId)){
       state.activeUserId = null; state.activeUserName = '';
     }
     if(uiInteracting){ deferredTripsUpdate = render; } else { render(); }
@@ -398,10 +416,8 @@ async function saveState(){
 }
 
 function activeTrip(){ return state.trips.find(t=>t.id===state.activeTripId); }
-function currentStop(){ const t=activeTrip(); return t.stops[t.currentStopIndex]; }
 function getCat(id){ return state.categories.find(c=>c.id===id) || state.categories[0]; }
 function switchTab(tab){ activeTrip().activeTab = tab; openZones={}; saveState(); render(); }
-function switchStop(idx){ activeTrip().currentStopIndex = idx; openZones={}; saveState(); render(); }
 function toggleZoneOpen(id){ openZones[id] = !openZones[id]; render(); }
 function toggleTheme(){ state.theme = state.theme==='light' ? 'dark' : 'light'; saveState(); render(); }
 
@@ -443,7 +459,7 @@ function confirmNewTrip(){
       packing = buildPackingFromPreset(source.split(':')[1]);
     }else if(source.startsWith('trip:')){
       const t = state.trips.find(t=>t.id===source.split(':')[1]);
-      packing = t ? t.packing.map(i=>({id:cid(), category:i.category, text:i.text, packed:false, flagged:i.flagged, carry:i.carry})) : seedPacking();
+      packing = t ? t.packing.map(i=>({id:cid(), category:i.category, text:i.text, packed:false, flagged:i.flagged, carry:i.carry, note:i.note||''})) : seedPacking();
     }else{
       packing = seedPacking();
     }
@@ -460,7 +476,7 @@ function renderTripSheet(){
   const html = state.trips.map(t=>{
     const active = t.id===state.activeTripId ? 'active' : '';
     return `<div class="trip-list-item ${active}">
-        <div style="flex:1;cursor:pointer;" onclick="selectTrip('${t.id}')"><div class="tname">${escapeHtml(t.name)}</div><div class="tmeta mono">${t.packing.length} món · ${t.stops.length} chặng</div></div>
+        <div style="flex:1;cursor:pointer;" onclick="selectTrip('${t.id}')"><div class="tname">${escapeHtml(t.name)}</div><div class="tmeta mono">${t.packing.length} món</div></div>
         <div style="display:flex;align-items:center;gap:10px;">
           <div class="bullet">${t.id===state.activeTripId? icon('check',16) :''}</div>
           ${state.trips.length>1 ? `<div class="cat-del" onclick="event.stopPropagation();deleteTrip('${t.id}')">${icon('close',16)}</div>` : ''}
@@ -493,37 +509,15 @@ function showEditTripSheet(){ renderEditTripSheet(); document.getElementById('ed
 function hideEditTripSheet(){ document.getElementById('edittrip-overlay').classList.remove('show'); }
 function renderEditTripSheet(){
   const trip = activeTrip();
-  const stopsHtml = trip.stops.map(s=>`
-    <div class="edit-stop-row">
-      <input type="text" value="${escapeHtml(s.name)}" id="es-name-${s.id}" placeholder="Tên chặng">
-      <input type="number" value="${s.nights}" min="1" id="es-nights-${s.id}" placeholder="Đêm">
-      <div class="edit-stop-del" onclick="removeStopFromEdit('${s.id}')">${icon('close',16)}</div>
-    </div>
-  `).join('');
   document.getElementById('edittrip-sheet-body').innerHTML = `
     <label>Tên chuyến đi</label>
     <input type="text" id="et-name" value="${escapeHtml(trip.name)}">
-    <label>Các chặng</label>
-    <div id="et-stops">${stopsHtml}</div>
   `;
-}
-function removeStopFromEdit(stopId){
-  const trip = activeTrip();
-  if(trip.stops.length<=1) return;
-  trip.stops = trip.stops.filter(s=>s.id!==stopId);
-  if(trip.currentStopIndex >= trip.stops.length) trip.currentStopIndex = trip.stops.length-1;
-  renderEditTripSheet();
 }
 function confirmEditTrip(){
   const trip = activeTrip();
   const name = document.getElementById('et-name').value.trim();
   if(name) trip.name = name;
-  trip.stops.forEach(s=>{
-    const nameEl = document.getElementById('es-name-'+s.id);
-    const nightsEl = document.getElementById('es-nights-'+s.id);
-    if(nameEl && nameEl.value.trim()) s.name = nameEl.value.trim();
-    if(nightsEl) s.nights = parseInt(nightsEl.value) || 1;
-  });
   hideEditTripSheet(); saveState(); render();
 }
 
@@ -578,15 +572,31 @@ function renderCatSheet(){
 function togglePacked(itemId){ const it=activeTrip().packing.find(i=>i.id===itemId); it.packed=!it.packed; saveState(); render(); }
 function toggleFlag(itemId){ const it=activeTrip().packing.find(i=>i.id===itemId); it.flagged=!it.flagged; saveState(); render(); }
 function toggleCarry(itemId){ const it=activeTrip().packing.find(i=>i.id===itemId); it.carry=!it.carry; saveState(); render(); }
+let noteEditingItemId = null;
+function openNoteEditor(itemId){
+  noteEditingItemId = itemId;
+  const item = activeTrip().packing.find(i=>i.id===itemId);
+  document.getElementById('note-sheet-body').innerHTML = `
+    <label>Ghi chú cho "${escapeHtml(item.text)}"</label>
+    <textarea id="note-text" rows="4" placeholder="VD: Gồm cáp sạc, củ sạc, adapter..." style="width:100%;background:var(--card-2);border:1px solid var(--line);border-radius:11px;padding:12px 13px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none;resize:vertical;">${escapeHtml(item.note||'')}</textarea>
+  `;
+  document.getElementById('note-overlay').classList.add('show');
+}
+function hideNoteEditor(){ document.getElementById('note-overlay').classList.remove('show'); noteEditingItemId=null; }
+function confirmNoteEditor(){
+  const item = activeTrip().packing.find(i=>i.id===noteEditingItemId);
+  if(item) item.note = document.getElementById('note-text').value.trim();
+  hideNoteEditor(); saveState(); render();
+}
 function deletePackingItem(itemId){
   const trip = activeTrip();
   trip.packing = trip.packing.filter(i=>i.id!==itemId);
-  trip.stops.forEach(s=>{ delete s.itemChecked[itemId]; });
+  delete trip.itemChecked[itemId];
   saveState(); render();
 }
 function addPackingItem(category, text){
   if(!text || !text.trim()) return;
-  activeTrip().packing.push({id:cid(), category, text:text.trim(), packed:false, flagged:false, carry:false});
+  activeTrip().packing.push({id:cid(), category, text:text.trim(), packed:false, flagged:false, carry:false, note:''});
   saveState(); render();
 }
 function bulkSetCategory(catId, value){
@@ -643,17 +653,17 @@ function rebuildPackingOrderFromDOM(){
   saveState(); render();
 }
 
-/* Room sweep */
-function toggleStopItemCheck(itemId){ const s=currentStop(); s.itemChecked[itemId]=!s.itemChecked[itemId]; saveState(); render(); }
-function toggleFixedItem(itemId){ const it=currentStop().fixedItems.find(i=>i.id===itemId); it.checked=!it.checked; saveState(); render(); }
+/* Room sweep — one reusable checklist per trip, reset after each use */
+function toggleStopItemCheck(itemId){ const t=activeTrip(); t.itemChecked[itemId]=!t.itemChecked[itemId]; saveState(); render(); }
+function toggleFixedItem(itemId){ const it=activeTrip().fixedItems.find(i=>i.id===itemId); it.checked=!it.checked; saveState(); render(); }
 function addFixedItem(text){
   if(!text || !text.trim()) return;
-  currentStop().fixedItems.push({id:cid(), text:text.trim(), checked:false});
+  activeTrip().fixedItems.push({id:cid(), text:text.trim(), checked:false});
   saveState(); render();
 }
 function deleteFixedItem(itemId){
-  const s = currentStop();
-  s.fixedItems = s.fixedItems.filter(i=>i.id!==itemId);
+  const trip = activeTrip();
+  trip.fixedItems = trip.fixedItems.filter(i=>i.id!==itemId);
   saveState(); render();
 }
 function addItemFromSweep(){
@@ -661,37 +671,29 @@ function addItemFromSweep(){
   const textInput = document.getElementById('qa-text');
   const text = textInput.value.trim();
   if(!text) return;
-  activeTrip().packing.push({id:cid(), category:catSel.value, text, packed:false, flagged:false, carry:false});
+  activeTrip().packing.push({id:cid(), category:catSel.value, text, packed:false, flagged:false, carry:false, note:''});
   textInput.value='';
   saveState(); render();
 }
 function bulkSetCategoryStop(catId, value){
-  const trip = activeTrip(); const stop = currentStop();
-  trip.packing.filter(i=>i.category===catId).forEach(i=>{ stop.itemChecked[i.id]=value; });
+  const trip = activeTrip();
+  trip.packing.filter(i=>i.category===catId).forEach(i=>{ trip.itemChecked[i.id]=value; });
   saveState(); render();
 }
-function bulkSetFixed(value){ currentStop().fixedItems.forEach(i=>i.checked=value); saveState(); render(); }
-function goNextStop(){
-  const trip = activeTrip(); const stop = currentStop();
-  stop.fixedItems.forEach(i=>i.checked=false);
-  stop.itemChecked = {};
-  if(trip.currentStopIndex < trip.stops.length - 1){ trip.currentStopIndex += 1; }
-  openZones={}; saveState(); render();
-}
-function showAddStopSheet(){ document.getElementById('overlay').classList.add('show'); }
-function hideAddStopSheet(){ document.getElementById('overlay').classList.remove('show'); }
-function confirmAddStop(){
-  const nameInput = document.getElementById('new-stop-name');
-  const nightsInput = document.getElementById('new-stop-nights');
-  const name = nameInput.value.trim();
-  if(!name) return;
-  const nights = parseInt(nightsInput.value) || 1;
-  activeTrip().stops.push({ id:cid(), name, nights, fixedItems:seedFixedItems(), itemChecked:{} });
-  nameInput.value=''; nightsInput.value='';
-  hideAddStopSheet(); saveState(); render();
+function bulkSetFixed(value){ activeTrip().fixedItems.forEach(i=>i.checked=value); saveState(); render(); }
+function resetSweepChecklist(){
+  const trip = activeTrip();
+  trip.fixedItems.forEach(i=>i.checked=false);
+  trip.itemChecked = {};
+  saveState(); render();
 }
 
 function escapeHtml(str){ const div=document.createElement('div'); div.textContent=str; return div.innerHTML; }
+function truncateNote(text, maxLen){
+  maxLen = maxLen || 40;
+  const oneLine = text.replace(/\n+/g, ' · ');
+  return oneLine.length > maxLen ? oneLine.slice(0, maxLen).trim() + '…' : oneLine;
+}
 
 /* ===== Multi-user cloud backend (Google Sheets via Apps Script Web App) ===== */
 let syncPushTimer = null;
@@ -717,13 +719,22 @@ async function apiCall(action, payload){
 }
 
 function tripToCloudPayload(trip){
-  return { name: trip.name, packing: trip.packing, stops: trip.stops, carryChecked: trip.carryChecked };
+  return { name: trip.name, packing: trip.packing, carryChecked: trip.carryChecked, itemChecked: trip.itemChecked, fixedItems: trip.fixedItems };
 }
 function cloudTripToLocal(id, data){
+  // Migrate old data shape (per-stop checklists) by folding the first stop's state into the trip level.
+  let itemChecked = data.itemChecked;
+  let fixedItems = data.fixedItems;
+  if(!itemChecked && data.stops && data.stops.length){
+    itemChecked = data.stops[0].itemChecked || {};
+    fixedItems = data.stops[0].fixedItems || seedFixedItems();
+  }
   return {
-    id, name: data.name || 'Chuyến đi', activeTab:'packing', currentStopIndex:0,
-    packing: data.packing || [], stops: data.stops && data.stops.length ? data.stops : [{ id:cid(), name:'Chặng 1', nights:1, fixedItems:seedFixedItems(), itemChecked:{} }],
-    carryChecked: data.carryChecked || {}
+    id, name: data.name || 'Chuyến đi', activeTab:'packing',
+    packing: data.packing || [],
+    carryChecked: data.carryChecked || {},
+    itemChecked: itemChecked || {},
+    fixedItems: fixedItems || seedFixedItems()
   };
 }
 
@@ -754,11 +765,12 @@ async function pushTripToCloud(tripId){
 }
 
 async function loadUsers(){
-  if(!state.webAppUrl) return;
+  if(!state.webAppUrl) return false;
   try{
     const res = await apiCall('listUsers', {});
-    if(res.ok) state.users = res.users;
-  }catch(e){ console.error('loadUsers error', e); }
+    if(res.ok){ state.users = res.users; return true; }
+    return false;
+  }catch(e){ console.error('loadUsers error', e); return false; }
 }
 
 async function switchToUser(userId, userName){
@@ -805,10 +817,9 @@ async function loadTripsForActiveUser(isFreshSwitch){
         const keepId = state.activeTripId;
         const prev = activeTrip();
         const keepTab = prev ? prev.activeTab : 'packing';
-        const keepStopIdx = prev ? prev.currentStopIndex : 0;
         state.trips = newTrips;
         const stillExists = state.trips.find(t=>t.id===keepId);
-        if(stillExists){ state.activeTripId = keepId; stillExists.activeTab = keepTab; stillExists.currentStopIndex = keepStopIdx; }
+        if(stillExists){ state.activeTripId = keepId; stillExists.activeTab = keepTab; }
         else state.activeTripId = state.trips[0].id;
         // openZones intentionally left untouched
       }
@@ -937,7 +948,7 @@ function render(){
         <div>
           <div class="eyebrow">${state.activeUserName ? escapeHtml(state.activeUserName) + ' · ' : ''}Chuyến đi hiện tại</div>
           <div class="tripname display">${escapeHtml(trip.name)}</div>
-          <div class="meta mono">${trip.stops.length} CHẶNG · ${trip.packing.length} MÓN <span class="chev">${icon('chevronDown',12)}</span></div>
+          <div class="meta mono">${trip.packing.length} MÓN <span class="chev">${icon('chevronDown',12)}</span></div>
         </div>
         <div class="pass-edit" onclick="event.stopPropagation(); showEditTripSheet()">${icon('pencil',16)}</div>
       </div>
@@ -954,11 +965,11 @@ function render(){
   if(trip.activeTab==='packing') renderPackingTab();
   else if(trip.activeTab==='carry'){ destroySortables(); renderCarryTab(); }
   else { destroySortables(); renderSweepTab(); }
-  document.getElementById('overlay').onclick=(e)=>{ if(e.target.id==='overlay') hideAddStopSheet(); };
   document.getElementById('trip-overlay').onclick=(e)=>{ if(e.target.id==='trip-overlay') hideTripSheet(); };
   document.getElementById('newtrip-overlay').onclick=(e)=>{ if(e.target.id==='newtrip-overlay') hideNewTripSheet(); };
   document.getElementById('edittrip-overlay').onclick=(e)=>{ if(e.target.id==='edittrip-overlay') hideEditTripSheet(); };
   document.getElementById('cat-overlay').onclick=(e)=>{ if(e.target.id==='cat-overlay') hideCatSheet(); };
+  document.getElementById('note-overlay').onclick=(e)=>{ if(e.target.id==='note-overlay') hideNoteEditor(); };
   document.getElementById('sync-overlay').onclick=(e)=>{ if(e.target.id==='sync-overlay') hideUserSheet(); };
 }
 
@@ -975,7 +986,8 @@ function renderPackingTab(){
       <div class="item ${item.flagged?'flag':''}" data-itemid="${item.id}">
         <div class="item-drag-handle">${icon('grip',15)}</div>
         <div class="checkbox ${item.packed?'checked':''}" onclick="togglePacked('${item.id}')">${item.packed?icon('check',12):''}</div>
-        <div class="item-text ${item.packed?'checked':''}" onclick="togglePacked('${item.id}')">${escapeHtml(item.text)}</div>
+        <div class="item-text ${item.packed?'checked':''}" onclick="togglePacked('${item.id}')">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
+        <div class="note-btn ${item.note?'on':''}" onclick="openNoteEditor('${item.id}')" title="Ghi chú">${icon('note',15)}</div>
         <div class="star-btn ${item.flagged?'on':''}" onclick="toggleFlag('${item.id}')" title="Đánh dấu nổi bật">${icon('star',15,item.flagged)}</div>
         <div class="carry-btn ${item.carry?'on':''}" onclick="toggleCarry('${item.id}')" title="Mang theo người khi ra ngoài">${icon('carry',15,item.carry)}</div>
         <div class="item-del" onclick="deletePackingItem('${item.id}')">${icon('close',14)}</div>
@@ -1063,7 +1075,7 @@ function renderCarryTab(){
       const checked = !!trip.carryChecked[item.id];
       return `<div class="item ${item.flagged?'flag':''}">
           <div class="checkbox ${checked?'checked':''}" onclick="toggleCarryCheck('${item.id}')">${checked?icon('check',12):''}</div>
-          <div class="item-text ${checked?'checked':''}" onclick="toggleCarryCheck('${item.id}')">${escapeHtml(item.text)}</div>
+          <div class="item-text ${checked?'checked':''}" onclick="toggleCarryCheck('${item.id}')">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
         </div>`;
     }).join('');
     return `
@@ -1102,30 +1114,21 @@ function renderCarryTab(){
 }
 function renderSweepTab(){
   const trip = activeTrip();
-  const stop = currentStop();
-  const totalItems = trip.packing.length + stop.fixedItems.length;
-  const doneItems = trip.packing.filter(i=>!!stop.itemChecked[i.id]).length + stop.fixedItems.filter(i=>i.checked).length;
+  const totalItems = trip.packing.length + trip.fixedItems.length;
+  const doneItems = trip.packing.filter(i=>!!trip.itemChecked[i.id]).length + trip.fixedItems.filter(i=>i.checked).length;
   const pct = totalItems ? Math.round((doneItems/totalItems)*100) : 0;
   const complete = totalItems>0 && doneItems===totalItems;
-
-  const stopsHtml = trip.stops.map((s,idx)=>{
-    const sTotal = trip.packing.length + s.fixedItems.length;
-    const sDone = trip.packing.filter(i=>s.itemChecked[i.id]).length + s.fixedItems.filter(i=>i.checked).length;
-    const isDone = sTotal>0 && sDone===sTotal;
-    const active = idx===trip.currentStopIndex ? 'active' : '';
-    return `<div class="stop-chip ${active} ${isDone?'done':''}" onclick="switchStop(${idx})"><div class="dot"></div>${escapeHtml(s.name)}</div>`;
-  }).join('') + `<div class="stop-chip" onclick="showAddStopSheet()"><span class="plus-ic">${icon('plus',13)}</span> Thêm chặng</div>`;
 
   const catSectionsHtml = state.categories.map(cat=>{
     const items = trip.packing.filter(i=>i.category===cat.id);
     if(items.length===0) return '';
-    const done = items.filter(i=>!!stop.itemChecked[i.id]).length;
+    const done = items.filter(i=>!!trip.itemChecked[i.id]).length;
     const doneClass = (items.length>0 && done===items.length) ? 'zdone' : '';
     const itemsHtml = items.map(item=>{
-      const checked = !!stop.itemChecked[item.id];
+      const checked = !!trip.itemChecked[item.id];
       return `<div class="item ${item.flagged?'flag':''}">
           <div class="checkbox ${checked?'checked':''}" onclick="toggleStopItemCheck('${item.id}')">${checked?icon('check',12):''}</div>
-          <div class="item-text ${checked?'checked':''}" onclick="toggleStopItemCheck('${item.id}')">${escapeHtml(item.text)}</div>
+          <div class="item-text ${checked?'checked':''}" onclick="toggleStopItemCheck('${item.id}')">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
           <div class="star-btn ${item.flagged?'on':''}" onclick="toggleFlag('${item.id}')" title="Đánh dấu nổi bật">${icon('star',15,item.flagged)}</div>
         </div>`;
     }).join('');
@@ -1144,9 +1147,9 @@ function renderSweepTab(){
       </div>`;
   }).join('');
 
-  const fixedDone = stop.fixedItems.filter(i=>i.checked).length;
-  const fixedDoneClass = (stop.fixedItems.length>0 && fixedDone===stop.fixedItems.length) ? 'zdone' : '';
-  const fixedItemsHtml = stop.fixedItems.map(item=>`
+  const fixedDone = trip.fixedItems.filter(i=>i.checked).length;
+  const fixedDoneClass = (trip.fixedItems.length>0 && fixedDone===trip.fixedItems.length) ? 'zdone' : '';
+  const fixedItemsHtml = trip.fixedItems.map(item=>`
       <div class="item">
         <div class="checkbox ${item.checked?'checked':''}" onclick="toggleFixedItem('${item.id}')">${item.checked?icon('check',12):''}</div>
         <div class="item-text ${item.checked?'checked':''}" onclick="toggleFixedItem('${item.id}')">${escapeHtml(item.text)}</div>
@@ -1165,7 +1168,6 @@ function renderSweepTab(){
         </div>
       </div>
     </div>
-    <div class="stops-row">${stopsHtml}</div>
     <div class="body-area">
       <div class="quick-add-card">
         <div class="quick-add-label">+ Thêm món cần mang <span class="quick-add-hint">(tự lưu vào tab Đóng gói)</span></div>
@@ -1180,7 +1182,7 @@ function renderSweepTab(){
         <div class="section-head">
           <div class="zicon">${icon('search',16)}</div>
           <div class="ztitle">Kiểm tra chung</div>
-          <div class="zprog mono">${fixedDone}/${stop.fixedItems.length}</div>
+          <div class="zprog mono">${fixedDone}/${trip.fixedItems.length}</div>
           <div class="bulk-icons">
             <div class="bulk-icon-btn check" onclick="bulkSetFixed(true)" title="Tick tất cả">${icon('check',13)}</div>
             <div class="bulk-icon-btn clear" onclick="bulkSetFixed(false)" title="Bỏ tất cả">${icon('close',13)}</div>
@@ -1196,7 +1198,7 @@ function renderSweepTab(){
       </div>
     </div>
     <div class="footer">
-      <button class="btn-next" ${complete?'':'disabled'} onclick="goNextStop()">${trip.currentStopIndex===trip.stops.length-1 ? 'Hoàn tất chuyến đi' : `Xong — chuyển sang ${trip.stops[trip.currentStopIndex+1]?.name || 'chặng tiếp'}`}</button>
+      <button class="btn-next" onclick="resetSweepChecklist()">${complete ? 'Xong — reset để dùng lượt sau' : 'Bỏ tick hết (reset)'}</button>
     </div>
   `;
 }
@@ -1213,10 +1215,9 @@ async function refreshTripsSilently(){
         const keepId = state.activeTripId;
         const prev = activeTrip();
         const keepTab = prev ? prev.activeTab : 'packing';
-        const keepStopIdx = prev ? prev.currentStopIndex : 0;
         state.trips = res.trips.map(t=>cloudTripToLocal(t.id, t.data));
         const stillExists = state.trips.find(t=>t.id===keepId);
-        if(stillExists){ state.activeTripId = keepId; stillExists.activeTab = keepTab; stillExists.currentStopIndex = keepStopIdx; }
+        if(stillExists){ state.activeTripId = keepId; stillExists.activeTab = keepTab; }
         else state.activeTripId = state.trips[0].id;
         saveState(); render();
       };
@@ -1253,18 +1254,6 @@ document.addEventListener('visibilitychange', ()=>{
 });
 </script>
 
-<div class="overlay" id="overlay">
-  <div class="sheet">
-    <h3>Thêm chặng mới</h3>
-    <input type="text" id="new-stop-name" placeholder="Tên thành phố / khách sạn" style="margin-bottom:10px;">
-    <input type="number" id="new-stop-nights" placeholder="Số đêm" min="1">
-    <div class="sheet-actions">
-      <button class="btn-cancel" onclick="hideAddStopSheet()">Hủy</button>
-      <button class="btn-confirm" onclick="confirmAddStop()">Thêm chặng</button>
-    </div>
-  </div>
-</div>
-
 <div class="overlay" id="trip-overlay">
   <div class="sheet">
     <h3>Các chuyến đi</h3>
@@ -1291,6 +1280,17 @@ document.addEventListener('visibilitychange', ()=>{
     <div class="sheet-actions">
       <button class="btn-cancel" onclick="hideEditTripSheet()">Hủy</button>
       <button class="btn-confirm" onclick="confirmEditTrip()">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="note-overlay">
+  <div class="sheet">
+    <h3>Ghi chú</h3>
+    <div id="note-sheet-body"></div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" onclick="hideNoteEditor()">Hủy</button>
+      <button class="btn-confirm" onclick="confirmNoteEditor()">Lưu</button>
     </div>
   </div>
 </div>
