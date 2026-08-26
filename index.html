@@ -367,6 +367,9 @@ function deleteTrip(tripId){
   state.trips = state.trips.filter(t=>t.id!==tripId);
   if(state.activeTripId===tripId) state.activeTripId = state.trips[0].id;
   saveState(); renderTripSheet(); render();
+  if(state.webAppUrl && state.activeUserId){
+    apiCall('deleteTrip', { tripId }).catch(e=>console.error('deleteTrip cloud error', e));
+  }
 }
 function showNewTripSheet(){
   hideTripSheet(); renderNewTripSheet();
@@ -733,15 +736,26 @@ async function createUser(){
   const name = nameInput.value.trim();
   if(!name) return;
   const btn = document.getElementById('sy-create-btn');
+  const errEl = document.getElementById('sy-error');
+  if(errEl) errEl.textContent = '';
   if(btn){ btn.textContent = 'Đang tạo...'; btn.disabled = true; }
   try{
     const res = await apiCall('createUser', { name });
     if(res.ok){
       await loadUsers();
       await switchToUser(res.id, res.name);
+    }else{
+      showUserSheetError('Server trả lỗi: ' + (res.error || 'không rõ') + (res.message ? ' — ' + res.message : ''));
     }
-  }catch(e){ alert('Lỗi kết nối tới máy chủ: ' + e.message); }
+  }catch(e){
+    showUserSheetError('Không gọi được tới máy chủ: ' + e.message);
+  }
   finally{ if(btn){ btn.textContent = 'Tạo user'; btn.disabled = false; } }
+}
+function showUserSheetError(msg){
+  renderUserSheet();
+  const errEl = document.getElementById('sy-error');
+  if(errEl) errEl.textContent = msg;
 }
 function renderUserSheet(){
   const usersHtml = (state.users||[]).map(u=>{
@@ -760,6 +774,7 @@ function renderUserSheet(){
       <input type="text" id="sy-new-name" placeholder="Tên của bạn" style="flex:1;" onkeydown="if(event.key==='Enter'){createUser();}">
       <button class="btn-confirm" id="sy-create-btn" style="flex:0 0 auto;padding:12px 16px;" onclick="createUser()">Tạo user</button>
     </div>
+    <div id="sy-error" style="color:var(--red);font-size:11.5px;margin-top:8px;"></div>
   `;
 }
 
