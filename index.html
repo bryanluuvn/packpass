@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
-<title>Checklist Du Lịch</title>
+<title>PackPass</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23E7A63C' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='4' width='19' height='16' rx='3' fill='%230B0E14'/%3E%3Cpath d='M9 4v16' stroke-dasharray='1.8 2.2'/%3E%3Cpath d='M13 10l2.5 2.5L19 8.5'/%3E%3C/svg%3E">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js" defer></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
@@ -43,7 +44,8 @@
 
   .topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;}
   .brand{display:flex;align-items:center;gap:8px;color:var(--text-dim);}
-  .brand .label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.12em;font-weight:600;}
+  .brand .glyph{color:var(--gold);display:flex;}
+  .brand .label{font-size:13px;font-family:'Fraunces',serif;font-weight:600;letter-spacing:-0.01em;color:var(--text);}
   .icon-btn{width:36px;height:36px;border-radius:11px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--shadow);color:var(--text);transition:transform 0.12s;}
   .icon-btn:active{transform:scale(0.92);}
 
@@ -220,6 +222,7 @@ const ICONS = {
   plus:`<path d="M12 5v14M5 12h14"/>`,
   close:`<path d="M6 6l12 12M18 6L6 18"/>`,
   check:`<path d="M5 13l4 4L19 7"/>`,
+  logo:`<rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="M9 4v16" stroke-dasharray="1.8 2.2"/><path d="M13 10l2.5 2.5L19 8.5"/>`,
   grip:`<circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/>`,
   carry:`<path d="M7.5 8V6.5a4.5 4.5 0 019 0V8"/><rect x="4" y="8" width="16" height="12.5" rx="2.5"/><path d="M9 12.3v1.8M15 12.3v1.8"/>`,
   sync:`<path d="M4 12a8 8 0 0113.66-5.66"/><path d="M20 12a8 8 0 01-13.66 5.66"/><path d="M17.3 2.5v4.2h-4.2"/><path d="M6.7 21.5v-4.2h4.2"/>`,
@@ -785,7 +788,7 @@ function render(){
   const root = document.getElementById('root');
   root.innerHTML = `
     <div class="topbar">
-      <div class="brand">${icon('other',15)}<span class="label">${state.activeUserName ? escapeHtml(state.activeUserName) : 'Checklist du lịch'}</span></div>
+      <div class="brand"><span class="glyph">${icon('logo',18)}</span><span class="label">PackPass</span></div>
       <div style="display:flex;gap:8px;">
         <div class="icon-btn" onclick="showUserSheet()" title="Người dùng">${icon('sync',17)}</div>
         <div class="icon-btn" onclick="toggleTheme()">${icon(state.theme==='light'?'moon':'sun',17)}</div>
@@ -795,7 +798,7 @@ function render(){
     <div class="pass">
       <div class="pass-top" onclick="showTripSheet()">
         <div>
-          <div class="eyebrow">Chuyến đi hiện tại</div>
+          <div class="eyebrow">${state.activeUserName ? escapeHtml(state.activeUserName) + ' · ' : ''}Chuyến đi hiện tại</div>
           <div class="tripname display">${escapeHtml(trip.name)}</div>
           <div class="meta mono">${trip.stops.length} CHẶNG · ${trip.packing.length} MÓN <span class="chev">${icon('chevronDown',12)}</span></div>
         </div>
