@@ -1,4 +1,4 @@
-const CACHE_NAME = 'packpass-v1';
+const CACHE_NAME = 'packpass-cache';
 const APP_SHELL = [
   './',
   './index.html',
@@ -33,19 +33,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Everything else (the app shell, fonts, Sortable CDN): cache-first, refresh in background.
+  // Network-first: always get the latest version when online (no version-bumping ever
+  // needed again). Only falls back to the last cached copy when genuinely offline.
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || fetchPromise;
-    })
+    fetch(event.request)
+      .then((response) => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
