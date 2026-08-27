@@ -426,6 +426,7 @@ async function loadState(){
         delete t.stops;
         delete t.currentStopIndex;
       }
+      reassignOrphanItems(t);
     });
     delete state.categories;
   }catch(e){ state = defaultState(); }
@@ -848,6 +849,13 @@ async function apiCall(action, payload){
 function tripToCloudPayload(trip){
   return { name: trip.name, packing: trip.packing, categories: trip.categories, carryChecked: trip.carryChecked, itemChecked: trip.itemChecked, fixedItems: trip.fixedItems };
 }
+function reassignOrphanItems(trip){
+  const validIds = new Set(trip.categories.map(c=>c.id));
+  const fallback = trip.categories[0] && trip.categories[0].id;
+  if(!fallback) return trip;
+  trip.packing.forEach(i=>{ if(!validIds.has(i.category)) i.category = fallback; });
+  return trip;
+}
 function cloudTripToLocal(id, data){
   // Migrate old data shape (per-stop checklists) by folding the first stop's state into the trip level.
   let itemChecked = data.itemChecked;
@@ -856,7 +864,7 @@ function cloudTripToLocal(id, data){
     itemChecked = data.stops[0].itemChecked || {};
     fixedItems = data.stops[0].fixedItems || seedFixedItems();
   }
-  return {
+  const trip = {
     id, name: data.name || 'Chuyến đi', activeTab:'packing',
     packing: data.packing || [],
     categories: (data.categories && data.categories.length) ? data.categories : seedCategories(),
@@ -864,6 +872,7 @@ function cloudTripToLocal(id, data){
     itemChecked: itemChecked || {},
     fixedItems: fixedItems || seedFixedItems()
   };
+  return reassignOrphanItems(trip);
 }
 
 // Push happens whenever a user is active (all their trips auto-sync — no per-trip toggle needed)
