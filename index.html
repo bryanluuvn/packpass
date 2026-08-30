@@ -172,14 +172,33 @@
   .item-note-preview{font-size:11px;color:var(--text-dim);margin-top:2px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
   .item-del{color:var(--text-dim);cursor:pointer;padding:6px;margin:-6px 0 -6px 6px;flex:0 0 auto;display:flex;opacity:0.6;border-left:1px solid var(--line);padding-left:12px;}
 
-  .item-popover{
-    position:fixed;width:208px;background:var(--card);border:1px solid var(--line);border-radius:14px;
-    box-shadow:0 16px 36px -10px rgba(0,0,0,0.35);overflow:hidden;z-index:120;
-    opacity:0;transform:scale(0.92);transform-origin:right top;
-    transition:opacity 0.14s ease, transform 0.14s cubic-bezier(.2,.9,.3,1.1);
-    pointer-events:none;
+  .edit-title-input{
+    width:100%;font-family:'Fraunces',serif;font-size:21px;font-weight:600;letter-spacing:-0.01em;
+    color:var(--text);background:transparent;border:none;border-bottom:1.5px solid var(--line);
+    padding:4px 2px 12px;outline:none;margin-bottom:16px;transition:border-color 0.15s;
   }
-  .item-popover.show{opacity:1;transform:scale(1);pointer-events:auto;}
+  .edit-title-input:focus{border-bottom-color:var(--gold);}
+  .edit-note-textarea{
+    width:100%;background:var(--card-2);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px;font-size:13.5px;line-height:1.5;color:var(--text);font-family:'Inter',sans-serif;
+    outline:none;resize:vertical;min-height:64px;transition:border-color 0.15s;
+  }
+  .edit-note-textarea:focus{border-color:var(--gold);}
+  .edit-note-textarea::placeholder{color:var(--text-dim);}
+  .edit-group{background:var(--card-2);border:1px solid var(--line);border-radius:14px;margin-top:16px;overflow:hidden;}
+  .edit-row{display:flex;align-items:center;gap:12px;padding:13px 14px;}
+  .edit-row + .edit-row{border-top:1px solid var(--line);}
+  .edit-row-icon{width:30px;height:30px;border-radius:9px;background:var(--card);display:flex;align-items:center;justify-content:center;flex:0 0 auto;color:var(--text-dim);}
+  .edit-row-icon.gold-on{color:var(--gold);}
+  .edit-row-icon.teal-on{color:var(--teal);}
+  .edit-row-label{flex:1;font-size:13.5px;font-weight:600;color:var(--text);}
+  .ios-toggle{width:44px;height:26px;border-radius:13px;background:var(--line);position:relative;flex:0 0 auto;cursor:pointer;transition:background 0.2s;}
+  .ios-toggle::after{content:'';position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.35);transition:transform 0.2s;}
+  .ios-toggle.on{background:var(--gold);}
+  .ios-toggle.on.teal{background:var(--teal);}
+  .ios-toggle.on::after{transform:translateX(18px);}
+  .edit-delete-link{display:flex;align-items:center;justify-content:center;gap:7px;color:var(--red);font-size:13px;font-weight:600;cursor:pointer;padding:14px 4px 2px;opacity:0.85;}
+  .edit-delete-link:active{opacity:1;}
   .pop-row{display:flex;align-items:center;gap:10px;padding:12px 14px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;border-top:1px solid var(--line);}
   .pop-row:first-child{border-top:none;}
   .pop-row:active{background:var(--card-2);}
@@ -232,7 +251,8 @@
 
   .overlay{position:fixed;inset:0;background:rgba(6,8,12,0.6);display:none;align-items:flex-end;justify-content:center;z-index:50;}
   .overlay.show{display:flex;}
-  .sheet{width:100%;max-width:480px;background:var(--card);border-radius:22px 22px 0 0;padding:22px 20px 26px;border:1px solid var(--line);border-bottom:none;max-height:82vh;overflow-y:auto;}
+  .sheet{width:100%;max-width:480px;background:var(--card);border-radius:22px 22px 0 0;padding:28px 20px 26px;border:1px solid var(--line);border-bottom:none;max-height:82vh;overflow-y:auto;position:relative;}
+  .sheet::before{content:'';position:absolute;top:10px;left:50%;transform:translateX(-50%);width:36px;height:4px;border-radius:2px;background:var(--line);}
   .sheet h3{font-family:'Fraunces',serif;font-size:19px;font-weight:600;margin-bottom:16px;}
   .sheet label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;margin-top:14px;font-weight:600;}
   .sheet label:first-of-type{margin-top:0;}
@@ -682,59 +702,42 @@ function clearPackingSearch(){
   filterPackingItems('');
 }
 let noteEditingItemId = null;
-let itemActionsId = null;
-function openItemActions(itemId, evt){
-  evt.stopPropagation();
-  itemActionsId = itemId;
-  renderItemActions();
-  const pop = document.getElementById('item-popover');
-  pop.classList.add('show');
-  const rowEl = evt.currentTarget.closest('.item') || evt.currentTarget;
-  const rect = rowEl.getBoundingClientRect();
-  const popWidth = 200, popHeight = 216;
-  let left = rect.right - popWidth;
-  if(left < 8) left = 8;
-  if(left + popWidth > window.innerWidth - 8) left = window.innerWidth - popWidth - 8;
-  let top = rect.top + 32;
-  let originY = 'top';
-  if(top + popHeight > window.innerHeight - 78){ top = rect.top - popHeight - 6; originY = 'bottom'; }
-  pop.style.left = left + 'px';
-  pop.style.top = top + 'px';
-  pop.style.transformOrigin = `right ${originY}`;
-}
-function hideItemActions(){ document.getElementById('item-popover').classList.remove('show'); itemActionsId=null; }
-function itemActionEditNote(){ const id=itemActionsId; hideItemActions(); openNoteEditor(id); }
-function itemActionToggleFlag(){ toggleFlag(itemActionsId); renderItemActions(); }
-function itemActionToggleCarry(){ toggleCarry(itemActionsId); renderItemActions(); }
-function itemActionDelete(){ const id=itemActionsId; hideItemActions(); deletePackingItem(id); }
-function renderItemActions(){
-  const item = activeTrip().packing.find(i=>i.id===itemActionsId);
-  if(!item) return;
-  document.getElementById('item-popover').innerHTML = `
-    <div class="pop-row" onclick="itemActionEditNote()">${icon('note',15)}<span>Sửa tên & ghi chú</span></div>
-    <div class="pop-row" onclick="itemActionToggleFlag()">
-      <span style="color:${item.flagged?'var(--gold)':'currentColor'};display:flex;">${icon('star',15,item.flagged)}</span>
-      <span style="flex:1;">Đánh dấu nổi bật</span>${item.flagged?icon('check',14):''}
-    </div>
-    <div class="pop-row" onclick="itemActionToggleCarry()">
-      <span style="color:${item.carry?'var(--teal)':'currentColor'};display:flex;">${icon('carry',15,item.carry)}</span>
-      <span style="flex:1;">Mang theo người</span>${item.carry?icon('check',14):''}
-    </div>
-    <div class="pop-row danger" onclick="itemActionDelete()">${icon('close',15)}<span>Xoá món</span></div>
-  `;
-}
 function openNoteEditor(itemId){
   noteEditingItemId = itemId;
-  const item = activeTrip().packing.find(i=>i.id===itemId);
-  document.getElementById('note-sheet-body').innerHTML = `
-    <label>Tên món</label>
-    <input type="text" id="edit-item-name" value="${escapeHtml(item.text)}" style="width:100%;background:var(--card-2);border:1px solid var(--line);border-radius:11px;padding:12px 13px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none;margin-bottom:14px;">
-    <label>Ghi chú</label>
-    <textarea id="note-text" rows="4" placeholder="VD: Gồm cáp sạc, củ sạc, adapter..." style="width:100%;background:var(--card-2);border:1px solid var(--line);border-radius:11px;padding:12px 13px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none;resize:vertical;">${escapeHtml(item.note||'')}</textarea>
-  `;
+  renderNoteEditorBody();
   document.getElementById('note-overlay').classList.add('show');
 }
 function hideNoteEditor(){ document.getElementById('note-overlay').classList.remove('show'); noteEditingItemId=null; }
+function toggleEditFlag(){ toggleFlag(noteEditingItemId); renderNoteEditorBody(true); }
+function toggleEditCarry(){ toggleCarry(noteEditingItemId); renderNoteEditorBody(true); }
+function itemActionDeleteFromEditor(){ const id=noteEditingItemId; hideNoteEditor(); deletePackingItem(id); }
+function renderNoteEditorBody(keepValues){
+  const item = activeTrip().packing.find(i=>i.id===noteEditingItemId);
+  if(!item) return;
+  const nameVal = keepValues ? document.getElementById('edit-item-name').value : item.text;
+  const noteVal = keepValues ? document.getElementById('note-text').value : (item.note||'');
+  document.getElementById('note-sheet-body').innerHTML = `
+    <input type="text" id="edit-item-name" class="edit-title-input" value="${escapeHtml(nameVal)}" placeholder="Tên món">
+    <textarea id="note-text" class="edit-note-textarea" rows="3" placeholder="Thêm ghi chú — VD: gồm cáp sạc, củ sạc, adapter...">${escapeHtml(noteVal)}</textarea>
+    <div class="edit-group">
+      <div class="edit-row" onclick="toggleEditFlag()">
+        <div class="edit-row-icon ${item.flagged?'gold-on':''}">${icon('star',15,item.flagged)}</div>
+        <div class="edit-row-label">Đánh dấu nổi bật</div>
+        <div class="ios-toggle ${item.flagged?'on':''}"></div>
+      </div>
+      <div class="edit-row" onclick="toggleEditCarry()">
+        <div class="edit-row-icon ${item.carry?'teal-on':''}">${icon('carry',15,item.carry)}</div>
+        <div class="edit-row-label">Mang theo người</div>
+        <div class="ios-toggle teal ${item.carry?'on':''}"></div>
+      </div>
+    </div>
+    <div class="edit-delete-link" onclick="itemActionDeleteFromEditor()">${icon('close',14)}Xoá món này</div>
+  `;
+  if(!keepValues){
+    const nameInput = document.getElementById('edit-item-name');
+    setTimeout(()=>{ nameInput.focus(); nameInput.select(); }, 50);
+  }
+}
 function confirmNoteEditor(){
   const item = activeTrip().packing.find(i=>i.id===noteEditingItemId);
   if(item){
@@ -1245,7 +1248,7 @@ function renderPackingTab(){
       <div class="item ${item.flagged?'flag':''} ${item.packed?'done-dim':''}" data-itemid="${item.id}">
         <div class="item-drag-handle">${icon('grip',15)}</div>
         <div class="checkbox ${item.packed?'checked':''}" onclick="togglePacked('${item.id}')">${item.packed?icon('check',12):''}</div>
-        <div class="item-text ${item.packed?'checked':''}" onclick="openItemActions('${item.id}', event)">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
+        <div class="item-text ${item.packed?'checked':''}" onclick="openNoteEditor('${item.id}')">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
         <div class="star-btn ${item.flagged?'on':''}" onclick="toggleFlag('${item.id}')" title="Đánh dấu nổi bật">${icon('star',15,item.flagged)}</div>
         <div class="carry-btn ${item.carry?'on':''}" onclick="toggleCarry('${item.id}')" title="Mang theo người">${icon('carry',15,item.carry)}</div>
       </div>`).join('');
@@ -1488,17 +1491,6 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
   });
 }
 
-document.addEventListener('click', (e)=>{
-  if(itemActionsId && !e.target.closest('.item-popover') && !e.target.closest('.item-text')){
-    hideItemActions();
-  }
-});
-
-// Close the popover on scroll (any scrollable ancestor, captured), window resize/rotate, or Escape key
-document.addEventListener('scroll', ()=>{ if(itemActionsId) hideItemActions(); }, { passive:true, capture:true });
-window.addEventListener('resize', ()=>{ if(itemActionsId) hideItemActions(); });
-document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && itemActionsId) hideItemActions(); });
-
 document.addEventListener('focusin', (e)=>{
   if(e.target && e.target.tagName === 'INPUT'){
     const root = document.getElementById('root');
@@ -1554,7 +1546,6 @@ document.addEventListener('visibilitychange', ()=>{
   </div>
 </div>
 
-<div class="item-popover" id="item-popover"></div>
 
 <div class="overlay" id="note-overlay">
   <div class="sheet">
