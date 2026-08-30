@@ -514,7 +514,7 @@ async function saveState(){
 }
 
 function activeTrip(){ return state.trips.find(t=>t.id===state.activeTripId); }
-function switchTab(tab){ hideItemActions(); activeTrip().activeTab = tab; openZones={}; saveState(); render(); }
+function switchTab(tab){ activeTrip().activeTab = tab; openZones={}; saveState(); render(); }
 function toggleZoneOpen(id){ openZones[id] = !openZones[id]; render(); }
 function toggleTheme(){ state.theme = state.theme==='light' ? 'dark' : 'light'; saveState(); render(); }
 
@@ -1345,7 +1345,7 @@ function renderCarryTab(){
       const checked = !!trip.carryChecked[item.id];
       return `<div class="item ${item.flagged?'flag':''}">
           <div class="checkbox ${checked?'checked':''}" onclick="toggleCarryCheck('${item.id}')">${checked?icon('check',12):''}</div>
-          <div class="item-text ${checked?'checked':''}" onclick="toggleCarryCheck('${item.id}')">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
+          <div class="item-text ${checked?'checked':''}" onclick="openNoteEditor('${item.id}')">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
           <div class="star-btn ${item.flagged?'on':''}" onclick="toggleFlag('${item.id}')" title="Đánh dấu nổi bật">${icon('star',15,item.flagged)}</div>
           <div class="carry-btn on" onclick="toggleCarry('${item.id}')" title="Bỏ khỏi Mang theo">${icon('carry',15,true)}</div>
         </div>`;
@@ -1392,7 +1392,7 @@ function renderSweepTab(){
       const checked = !!trip.itemChecked[item.id];
       return `<div class="item ${item.flagged?'flag':''}">
           <div class="checkbox ${checked?'checked':''}" onclick="toggleStopItemCheck('${item.id}')">${checked?icon('check',12):''}</div>
-          <div class="item-text ${checked?'checked':''}" onclick="toggleStopItemCheck('${item.id}')">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
+          <div class="item-text ${checked?'checked':''}" onclick="openNoteEditor('${item.id}')">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
           <div class="star-btn ${item.flagged?'on':''}" onclick="toggleFlag('${item.id}')" title="Đánh dấu nổi bật">${icon('star',15,item.flagged)}</div>
         </div>`;
     }).join('');
