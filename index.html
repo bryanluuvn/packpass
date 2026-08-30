@@ -164,13 +164,13 @@
   .item-text.checked{color:var(--text-dim);text-decoration:line-through;}
   .star-btn{cursor:pointer;flex:0 0 auto;padding:5px;margin:-5px;color:var(--text-dim);display:flex;}
   .star-btn.on{color:var(--gold);}
+  .item.done-dim .star-btn.on,.item.done-dim .carry-btn.on{opacity:0.4;}
   .carry-btn{cursor:pointer;flex:0 0 auto;padding:5px;margin:-5px;color:var(--text-dim);display:flex;}
   .carry-btn.on{color:var(--teal);}
   .note-btn{cursor:pointer;flex:0 0 auto;padding:5px;margin:-5px;color:var(--text-dim);display:flex;}
   .note-btn.on{color:var(--text);}
   .item-note-preview{font-size:11px;color:var(--text-dim);margin-top:2px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
   .item-del{color:var(--text-dim);cursor:pointer;padding:6px;margin:-6px 0 -6px 6px;flex:0 0 auto;display:flex;opacity:0.6;border-left:1px solid var(--line);padding-left:12px;}
-  .item-more-btn{color:var(--text-dim);cursor:pointer;flex:0 0 auto;padding:6px;margin:-6px;display:flex;}
 
   .item-popover{
     position:fixed;width:208px;background:var(--card);border:1px solid var(--line);border-radius:14px;
@@ -689,13 +689,13 @@ function openItemActions(itemId, evt){
   renderItemActions();
   const pop = document.getElementById('item-popover');
   pop.classList.add('show');
-  const btn = evt.currentTarget;
-  const rect = btn.getBoundingClientRect();
-  const popWidth = 200, popHeight = 108;
+  const rowEl = evt.currentTarget.closest('.item') || evt.currentTarget;
+  const rect = rowEl.getBoundingClientRect();
+  const popWidth = 200, popHeight = 216;
   let left = rect.right - popWidth;
   if(left < 8) left = 8;
   if(left + popWidth > window.innerWidth - 8) left = window.innerWidth - popWidth - 8;
-  let top = rect.bottom + 6;
+  let top = rect.top + 32;
   let originY = 'top';
   if(top + popHeight > window.innerHeight - 78){ top = rect.top - popHeight - 6; originY = 'bottom'; }
   pop.style.left = left + 'px';
@@ -704,12 +704,22 @@ function openItemActions(itemId, evt){
 }
 function hideItemActions(){ document.getElementById('item-popover').classList.remove('show'); itemActionsId=null; }
 function itemActionEditNote(){ const id=itemActionsId; hideItemActions(); openNoteEditor(id); }
+function itemActionToggleFlag(){ toggleFlag(itemActionsId); renderItemActions(); }
+function itemActionToggleCarry(){ toggleCarry(itemActionsId); renderItemActions(); }
 function itemActionDelete(){ const id=itemActionsId; hideItemActions(); deletePackingItem(id); }
 function renderItemActions(){
   const item = activeTrip().packing.find(i=>i.id===itemActionsId);
   if(!item) return;
   document.getElementById('item-popover').innerHTML = `
     <div class="pop-row" onclick="itemActionEditNote()">${icon('note',15)}<span>Sửa tên & ghi chú</span></div>
+    <div class="pop-row" onclick="itemActionToggleFlag()">
+      <span style="color:${item.flagged?'var(--gold)':'currentColor'};display:flex;">${icon('star',15,item.flagged)}</span>
+      <span style="flex:1;">Đánh dấu nổi bật</span>${item.flagged?icon('check',14):''}
+    </div>
+    <div class="pop-row" onclick="itemActionToggleCarry()">
+      <span style="color:${item.carry?'var(--teal)':'currentColor'};display:flex;">${icon('carry',15,item.carry)}</span>
+      <span style="flex:1;">Mang theo người</span>${item.carry?icon('check',14):''}
+    </div>
     <div class="pop-row danger" onclick="itemActionDelete()">${icon('close',15)}<span>Xoá món</span></div>
   `;
 }
@@ -1232,13 +1242,12 @@ function renderPackingTab(){
     const isOpen = showOnlyUnpacked ? true : !!openZones['cat-'+cat.id];
     const doneClass = (cTotal>0 && cDone===cTotal) ? 'zdone' : '';
     const itemsHtml = items.map(item=>`
-      <div class="item ${item.flagged?'flag':''}" data-itemid="${item.id}">
+      <div class="item ${item.flagged?'flag':''} ${item.packed?'done-dim':''}" data-itemid="${item.id}">
         <div class="item-drag-handle">${icon('grip',15)}</div>
         <div class="checkbox ${item.packed?'checked':''}" onclick="togglePacked('${item.id}')">${item.packed?icon('check',12):''}</div>
-        <div class="item-text ${item.packed?'checked':''}" onclick="togglePacked('${item.id}')">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
+        <div class="item-text ${item.packed?'checked':''}" onclick="openItemActions('${item.id}', event)">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
         <div class="star-btn ${item.flagged?'on':''}" onclick="toggleFlag('${item.id}')" title="Đánh dấu nổi bật">${icon('star',15,item.flagged)}</div>
         <div class="carry-btn ${item.carry?'on':''}" onclick="toggleCarry('${item.id}')" title="Mang theo người">${icon('carry',15,item.carry)}</div>
-        <div class="item-more-btn" onclick="openItemActions('${item.id}', event)">${icon('more',16)}</div>
       </div>`).join('');
     return `
       <div class="zone ${isOpen?'open':''} ${doneClass}" data-catid="${cat.id}">
@@ -1480,7 +1489,7 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
 }
 
 document.addEventListener('click', (e)=>{
-  if(itemActionsId && !e.target.closest('.item-popover') && !e.target.closest('.item-more-btn')){
+  if(itemActionsId && !e.target.closest('.item-popover') && !e.target.closest('.item-text')){
     hideItemActions();
   }
 });
