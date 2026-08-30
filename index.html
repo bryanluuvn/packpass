@@ -143,9 +143,9 @@
 
   .zone-items{max-height:0;overflow:hidden;transition:max-height 0.32s ease;padding:0 14px;}
   .zone.open .zone-items{max-height:900px;padding-bottom:12px;}
-  .zone-items-inner{padding-left:44px;display:flex;flex-direction:column;}
+  .zone-items-inner{padding-left:0;display:flex;flex-direction:column;}
 
-  .section-body{padding:0 14px 12px 58px;}
+  .section-body{padding:0 14px 12px;}
 
   .drag-handle{color:var(--text-dim);cursor:grab;flex:0 0 auto;display:flex;padding:4px;margin:-4px;touch-action:none;}
   .drag-handle:active{cursor:grabbing;}
@@ -160,7 +160,7 @@
   .item.flag:first-child{border-top:none;}
   .checkbox{width:23px;height:23px;border-radius:50%;border:1.6px solid var(--text-dim);flex:0 0 auto;display:flex;align-items:center;justify-content:center;cursor:pointer;color:transparent;transition:all 0.15s;}
   .checkbox.checked{background:var(--teal);border-color:var(--teal);color:var(--teal-ink);}
-  .item-text{font-size:13.5px;flex:1;cursor:pointer;line-height:1.4;}
+  .item-text{font-size:13.5px;flex:1;min-width:0;cursor:pointer;line-height:1.4;overflow-wrap:break-word;word-break:break-word;}
   .item-text.checked{color:var(--text-dim);text-decoration:line-through;}
   .star-btn{cursor:pointer;flex:0 0 auto;padding:5px;margin:-5px;color:var(--text-dim);display:flex;}
   .star-btn.on{color:var(--gold);}
@@ -170,6 +170,21 @@
   .note-btn.on{color:var(--text);}
   .item-note-preview{font-size:11px;color:var(--text-dim);margin-top:2px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
   .item-del{color:var(--text-dim);cursor:pointer;padding:6px;margin:-6px 0 -6px 6px;flex:0 0 auto;display:flex;opacity:0.6;border-left:1px solid var(--line);padding-left:12px;}
+  .item-more-btn{color:var(--text-dim);cursor:pointer;flex:0 0 auto;padding:6px;margin:-6px;display:flex;}
+
+  .item-popover{
+    position:fixed;width:208px;background:var(--card);border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 16px 36px -10px rgba(0,0,0,0.35);overflow:hidden;z-index:120;
+    opacity:0;transform:scale(0.92);transform-origin:right top;
+    transition:opacity 0.14s ease, transform 0.14s cubic-bezier(.2,.9,.3,1.1);
+    pointer-events:none;
+  }
+  .item-popover.show{opacity:1;transform:scale(1);pointer-events:auto;}
+  .pop-row{display:flex;align-items:center;gap:10px;padding:12px 14px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;border-top:1px solid var(--line);}
+  .pop-row:first-child{border-top:none;}
+  .pop-row:active{background:var(--card-2);}
+  .pop-row.danger{color:var(--red);}
+  .pop-row svg{flex:0 0 auto;}
   .item-del:active{color:var(--red);opacity:1;transform:scale(0.9);}
   .item-del:hover{opacity:1;color:var(--red);}
 
@@ -479,7 +494,7 @@ async function saveState(){
 }
 
 function activeTrip(){ return state.trips.find(t=>t.id===state.activeTripId); }
-function switchTab(tab){ activeTrip().activeTab = tab; openZones={}; saveState(); render(); }
+function switchTab(tab){ hideItemActions(); activeTrip().activeTab = tab; openZones={}; saveState(); render(); }
 function toggleZoneOpen(id){ openZones[id] = !openZones[id]; render(); }
 function toggleTheme(){ state.theme = state.theme==='light' ? 'dark' : 'light'; saveState(); render(); }
 
@@ -667,6 +682,37 @@ function clearPackingSearch(){
   filterPackingItems('');
 }
 let noteEditingItemId = null;
+let itemActionsId = null;
+function openItemActions(itemId, evt){
+  evt.stopPropagation();
+  itemActionsId = itemId;
+  renderItemActions();
+  const pop = document.getElementById('item-popover');
+  pop.classList.add('show');
+  const btn = evt.currentTarget;
+  const rect = btn.getBoundingClientRect();
+  const popWidth = 200, popHeight = 108;
+  let left = rect.right - popWidth;
+  if(left < 8) left = 8;
+  if(left + popWidth > window.innerWidth - 8) left = window.innerWidth - popWidth - 8;
+  let top = rect.bottom + 6;
+  let originY = 'top';
+  if(top + popHeight > window.innerHeight - 78){ top = rect.top - popHeight - 6; originY = 'bottom'; }
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+  pop.style.transformOrigin = `right ${originY}`;
+}
+function hideItemActions(){ document.getElementById('item-popover').classList.remove('show'); itemActionsId=null; }
+function itemActionEditNote(){ const id=itemActionsId; hideItemActions(); openNoteEditor(id); }
+function itemActionDelete(){ const id=itemActionsId; hideItemActions(); deletePackingItem(id); }
+function renderItemActions(){
+  const item = activeTrip().packing.find(i=>i.id===itemActionsId);
+  if(!item) return;
+  document.getElementById('item-popover').innerHTML = `
+    <div class="pop-row" onclick="itemActionEditNote()">${icon('note',15)}<span>Sửa tên & ghi chú</span></div>
+    <div class="pop-row danger" onclick="itemActionDelete()">${icon('close',15)}<span>Xoá món</span></div>
+  `;
+}
 function openNoteEditor(itemId){
   noteEditingItemId = itemId;
   const item = activeTrip().packing.find(i=>i.id===itemId);
@@ -1190,10 +1236,9 @@ function renderPackingTab(){
         <div class="item-drag-handle">${icon('grip',15)}</div>
         <div class="checkbox ${item.packed?'checked':''}" onclick="togglePacked('${item.id}')">${item.packed?icon('check',12):''}</div>
         <div class="item-text ${item.packed?'checked':''}" onclick="togglePacked('${item.id}')">${escapeHtml(item.text)}${item.note?`<div class="item-note-preview">${escapeHtml(truncateNote(item.note))}</div>`:''}</div>
-        <div class="note-btn ${item.note?'on':''}" onclick="openNoteEditor('${item.id}')" title="Sửa & ghi chú">${icon('note',15)}</div>
         <div class="star-btn ${item.flagged?'on':''}" onclick="toggleFlag('${item.id}')" title="Đánh dấu nổi bật">${icon('star',15,item.flagged)}</div>
-        <div class="carry-btn ${item.carry?'on':''}" onclick="toggleCarry('${item.id}')" title="Mang theo người khi ra ngoài">${icon('carry',15,item.carry)}</div>
-        <div class="item-del" onclick="deletePackingItem('${item.id}')">${icon('close',14)}</div>
+        <div class="carry-btn ${item.carry?'on':''}" onclick="toggleCarry('${item.id}')" title="Mang theo người">${icon('carry',15,item.carry)}</div>
+        <div class="item-more-btn" onclick="openItemActions('${item.id}', event)">${icon('more',16)}</div>
       </div>`).join('');
     return `
       <div class="zone ${isOpen?'open':''} ${doneClass}" data-catid="${cat.id}">
@@ -1434,6 +1479,17 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
   });
 }
 
+document.addEventListener('click', (e)=>{
+  if(itemActionsId && !e.target.closest('.item-popover') && !e.target.closest('.item-more-btn')){
+    hideItemActions();
+  }
+});
+
+// Close the popover on scroll (any scrollable ancestor, captured), window resize/rotate, or Escape key
+document.addEventListener('scroll', ()=>{ if(itemActionsId) hideItemActions(); }, { passive:true, capture:true });
+window.addEventListener('resize', ()=>{ if(itemActionsId) hideItemActions(); });
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && itemActionsId) hideItemActions(); });
+
 document.addEventListener('focusin', (e)=>{
   if(e.target && e.target.tagName === 'INPUT'){
     const root = document.getElementById('root');
@@ -1488,6 +1544,8 @@ document.addEventListener('visibilitychange', ()=>{
     </div>
   </div>
 </div>
+
+<div class="item-popover" id="item-popover"></div>
 
 <div class="overlay" id="note-overlay">
   <div class="sheet">
